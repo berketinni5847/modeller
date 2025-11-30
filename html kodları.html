@@ -1,0 +1,2945 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Alt Dolap – Parametrik Çekmece Modülü</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #ffffff;
+            --text: #111;
+            --border: #e0e0e0;
+            --thumb: #000;
+        }
+
+        * {
+            box-sizing: border-box;
+            outline: none;
+        }
+
+        body {
+            margin: 0;
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+            font-family: 'Inter', sans-serif;
+            color: var(--text);
+            overflow: hidden;
+            background: var(--bg);
+            font-size: 13px;
+        }
+
+        #left-column {
+            flex: 0 0 75%;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border);
+            min-width: 0;
+        }
+
+        #canvas-wrapper {
+            position: relative;
+            height: 55%;
+            display: flex;
+            flex-direction: row;
+            background: #f7f7f7;
+            border-bottom: 1px solid var(--border);
+        }
+
+        /* TEKNİK PANEL – overlay */
+        #drawing-wrapper {
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 40%;
+            background: #fff;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            overflow: hidden;
+            transition: width .28s ease, transform .32s cubic-bezier(.22, .61, .36, 1), box-shadow .32s ease;
+            z-index: 10;
+            will-change: width, transform;
+        }
+
+        /* Modern anim: kapanınca hafif geriye çekil ve gölge */
+        #drawing-wrapper.animating {
+            will-change: transform, box-shadow;
+        }
+
+        #drawing-wrapper:not(.strip) {
+            box-shadow: 0 8px 24px rgba(0, 0, 0, .08);
+        }
+
+        #drawing-wrapper.strip {
+            width: 60px;
+            transform: translateX(-2px);
+            box-shadow: 0 6px 18px rgba(0, 0, 0, .06);
+        }
+
+        #drawingCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            background: #ffffff;
+            image-rendering: auto;
+        }
+
+        #drawingToggle {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            width: 22px;
+            height: 22px;
+            border: 1.4px solid #000;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            background: #fff;
+            z-index: 15;
+            user-select: none;
+            transition: transform .2s ease;
+        }
+
+        #drawingToggle:hover {
+            transform: scale(1.04);
+        }
+
+        #drawingLabel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-90deg);
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: #000;
+            pointer-events: none;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity .2s ease;
+        }
+
+        #drawing-wrapper.strip #drawingLabel {
+            opacity: 1;
+        }
+
+        #drawing-wrapper.strip #drawingCanvas {
+            display: none;
+        }
+
+        /* 3D SAHNE */
+        #canvas-container {
+            flex: 1;
+            height: 100%;
+            position: relative;
+            width: 100%;
+            min-width: 0;
+        }
+
+        #bottom-wrapper {
+            height: 45%;
+            display: flex;
+            min-height: 0;
+        }
+
+        #nesting-area {
+            width: 65%;
+            border-right: 1px solid var(--border);
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .nesting-header {
+            padding: 8px 15px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            background: #fff;
+            z-index: 2;
+            gap: 10px;
+        }
+
+        .canvas-scroll-container {
+            flex: 1;
+            background: #fff;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 10px;
+            min-height: 0;
+            position: relative;
+        }
+
+        #nestingCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #table-container {
+            width: 35%;
+            background: #fff;
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        #sidebar {
+            flex: 0 0 25%;
+            background: #fff;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow-y: auto;
+            min-width: 280px;
+        }
+
+        h3 {
+            margin: 0 0 10px 0;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            border-bottom: 1px solid #000;
+            padding-bottom: 4px;
+            color: #222;
+        }
+
+        .price-section {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .price-val {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 42px;
+            font-weight: 800;
+            letter-spacing: -2px;
+            line-height: 1;
+            color: #000;
+        }
+
+        .cost-inputs {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            background: #f9f9f9;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .cost-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .cost-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #333;
+        }
+
+        .cost-input {
+            width: 60px;
+            height: 18px;
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid #999;
+            text-align: right;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 12px;
+            padding: 0;
+            color: #000;
+        }
+
+        .cost-input:focus {
+            border-bottom-color: #000;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            margin-bottom: 12px;
+        }
+
+        .control-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        input[type=number] {
+            width: 70px;
+            padding: 2px 4px;
+            height: 24px;
+            border: 1px solid #ccc;
+            background: #fff;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 700;
+            text-align: right;
+            color: #000;
+        }
+
+        .qty-input {
+            background: #222;
+            color: #fff;
+            border: none;
+            width: 70px !important;
+            font-size: 13px !important;
+        }
+
+        input[type=range] {
+            flex: 1;
+            -webkit-appearance: none;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 2px;
+            background: #ccc;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 12px;
+            width: 12px;
+            background: #000;
+            margin-top: -5px;
+            border-radius: 0;
+            transition: transform .1s;
+        }
+
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+
+        select {
+            width: 100%;
+            padding: 4px;
+            border: 1px solid #ccc;
+            font-family: 'Inter';
+            font-weight: 600;
+            font-size: 11px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+            font-family: 'JetBrains Mono', monospace;
+            margin-bottom: 5px;
+        }
+
+        th {
+            text-align: left;
+            padding: 6px 0;
+            border-bottom: 1px solid #000;
+            font-family: 'Inter', sans-serif;
+            font-weight: 700;
+            color: #444;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+            color: #222;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .badge {
+            background: #000;
+            color: #fff;
+            padding: 2px 5px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            background: #fff;
+            padding: 5px 10px;
+            border: 1px solid #000;
+            pointer-events: none;
+        }
+
+        .grand-total-section {
+            background: #111;
+            color: #fff;
+            padding: 10px;
+            border-radius: 2px;
+            margin-top: 12px;
+        }
+
+        .gt-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .gt-val {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 24px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .legend {
+            display: flex;
+            gap: 10px;
+            font-size: 10px;
+        }
+
+        .legend span {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 1px;
+            border: 1px solid #ccc;
+            display: inline-block;
+        }
+
+        #efficiencyPanel {
+            margin: 6px 0 10px 0;
+            padding: 6px 8px;
+            background: #111;
+            color: #fff;
+            font-size: 11px;
+            font-family: 'JetBrains Mono', monospace;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 16px;
+            border-radius: 2px;
+        }
+
+        #efficiencyPanel span {
+            white-space: nowrap;
+        }
+
+        #helpPanel {
+            position: absolute;
+            right: 15px;
+            bottom: 15px;
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid #ddd;
+            padding: 6px 8px;
+            font-size: 10px;
+            font-family: 'Inter', sans-serif;
+            border-radius: 3px;
+            z-index: 5;
+        }
+
+        .help-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 2px;
+        }
+
+        .help-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .help-icon {
+            font-size: 11px;
+        }
+
+        /* Orbit / el ikonu */
+        #orbitHint {
+            position: absolute;
+            left: 50%;
+            bottom: 20px;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            font-size: 12px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 6;
+            pointer-events: none;
+            opacity: 1;
+            transition: opacity .3s ease;
+        }
+
+        #gestureIcon {
+            position: relative;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: #fff url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22"><path d="M10.5 4a2 2 0 0 1 2 2v4.2l.7-.4a1.5 1.5 1 1 1.5 2.6l-4.6 2.6a1.5 1.5 0 0 1-2.2-1.3V6a2 2 0 0 1 2-2z" fill="%23000"/></svg>') no-repeat center / 14px 14px;
+            animation: sway 1.4s ease-in-out infinite alternate;
+        }
+
+        #gestureIcon:after {
+            content: "";
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            border: 2px dashed rgba(255, 255, 255, .85);
+            animation: spin 2.2s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes sway {
+            0% {
+                transform: translateX(0);
+            }
+
+            50% {
+                transform: translateX(6px);
+            }
+
+            100% {
+                transform: translateX(-2px);
+            }
+        }
+
+        #exportButtons {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        #exportButtons button {
+            border: none;
+            padding: 5px 7px;
+            font-size: 9px;
+            font-family: 'JetBrains Mono', monospace;
+            text-transform: uppercase;
+            letter-spacing: .8px;
+            cursor: pointer;
+            background: #111;
+            color: #fff;
+            white-space: nowrap;
+        }
+
+        #exportButtons button:hover {
+            background: #333;
+        }
+
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="left-column">
+        <div id="canvas-wrapper">
+            <!-- TEKNİK ÇİZİM – overlay -->
+            <div id="drawing-wrapper">
+                <canvas id="drawingCanvas"></canvas>
+                <div id="drawingToggle" title="Teknik Detayları Aç/Kapa">✕</div>
+                <div id="drawingLabel">TEKNİK DETAYLAR</div>
+            </div>
+
+            <!-- 3D MODEL -->
+            <div id="canvas-container">
+                <div id="overlay">3D GÖRÜNÜM – ÇEKMECE MODÜLÜ</div>
+                <div id="helpPanel">
+                    <div class="help-row"><span class="help-icon">🖱️</span><span>Sol tuş: Döndür</span></div>
+                    <div class="help-row"><span class="help-icon">🖱️</span><span>Sağ tuş: Kaydır</span></div>
+                    <div class="help-row"><span class="help-icon">🖱️</span><span>Scroll: Yakın/Uzak</span></div>
+                </div>
+                <div id="orbitHint">
+                    <span id="gestureIcon" aria-hidden="true"></span>
+                    <span>Modeli sürükle</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="bottom-wrapper">
+            <div id="nesting-area">
+                <div class="nesting-header">
+                    <div style="display:flex;flex-direction:column;gap:2px;">
+                        <span id="sheetDimLabel">KESİM ŞEMASI (210x300 cm)</span>
+                        <span id="kerfInfoLabel" style="font-size:9px;font-weight:400;text-transform:none;letter-spacing:0;">Kerf boşluğu: 3 mm</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <span class="badge" id="sheetCountBadge">1 PLAKA</span>
+                        <div id="exportButtons">
+                            <button onclick="exportExcel()">MALZEME (Excel)</button>
+                            <button onclick="exportDXF()">KESİM (DXF)</button>
+                            <button onclick="export2DDXF()">2D ÇİZİM (DXF)</button>
+                            <button onclick="exportNestingPDF()">KESİM PDF</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="canvas-scroll-container">
+                    <canvas id="nestingCanvas"></canvas>
+                </div>
+                <div style="padding:5px 15px; border-top:1px solid #eee;">
+                    <div class="legend">
+                        <span><span class="dot" style="background:#fff"></span>Gövde / Yan / Kuşak</span>
+                        <span><span class="dot" style="background:#9ca3af"></span>Çekmece Önü</span>
+                        <span><span class="dot" style="background:#eee"></span>Arkalık & Altlar</span>
+                    </div>
+                </div>
+            </div>
+            <div id="table-container">
+                <h3>PARÇA LİSTESİ</h3>
+                <div id="efficiencyPanel">
+                    <span>Toplam plaka: 0.00 m²</span>
+                    <span>Kullanılan: 0.00 m²</span>
+                    <span>Verimlilik: 0.0%</span>
+                    <span>Fire: 0.0%</span>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Parça</th>
+                            <th>Adet</th>
+                            <th style="text-align:right">Ölçü (mm)</th>
+                            <th style="text-align:right">Alan (m²)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="woodList"></tbody>
+                </table>
+                <h3 style="margin-top:20px;">HIRDAVAT</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Tip</th>
+                            <th style="text-align:right">Adet</th>
+                        </tr>
+                    </thead>
+                    <tbody id="hardwareList"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="sidebar">
+        <div class="price-section">
+            <span style="font-size:10px;font-weight:700;color:#555;">1 ADET MODÜL FİYATI</span>
+            <div class="price-val" id="unitPriceDisplay">0 TL</div>
+        </div>
+
+        <div class="cost-inputs">
+            <div class="cost-row">
+                <span class="cost-label">MDF m² FİYATI</span>
+                <input type="number" id="inpUnitPrice" value="700" class="cost-input" onchange="updateSystem()">
+            </div>
+            <div class="cost-row">
+                <span class="cost-label">Ray Takımı (çift)</span>
+                <input type="number" id="inpHingePrice" value="250" class="cost-input" onchange="updateSystem()">
+            </div>
+            <div class="cost-row">
+                <span class="cost-label">Minifiks (fiyat)</span>
+                <input type="number" id="inpMiniPrice" value="15" class="cost-input" onchange="updateSystem()">
+            </div>
+            <div class="cost-row">
+                <span class="cost-label">Vida (fiyat)</span>
+                <input type="number" id="inpPinPrice" value="1.5" class="cost-input" onchange="updateSystem()">
+            </div>
+            <div class="cost-row">
+                <span class="cost-label">Kulp (fiyat)</span>
+                <input type="number" id="inpHandlePrice" value="150" class="cost-input" onchange="updateSystem()">
+            </div>
+            <div class="cost-row">
+                <span class="cost-label">Ayak (fiyat)</span>
+                <input type="number" id="inpLegPrice" value="30" class="cost-input" onchange="updateSystem()">
+            </div>
+            <div class="cost-row">
+                <span class="cost-label" style="color:#000;">İŞÇİLİK (%)</span>
+                <input type="number" id="inpLaborPercent" value="20" class="cost-input" style="border-bottom:2px solid #000;" onchange="updateSystem()">
+            </div>
+        </div>
+
+        <!-- Plaka tipi -->
+        <div class="control-group" style="margin-top:6px;">
+            <div class="control-header"><span>PLAKA TİPİ (KESİM ŞEMASI)</span></div>
+            <select id="selSheetSize" onchange="updateSheetSize()">
+                <option value="2100,3000">210 x 300 cm</option>
+                <option value="1830,2440">183 x 244 cm</option>
+                <option value="1220,2440">122 x 244 cm</option>
+            </select>
+        </div>
+
+        <div>
+            <h3>PARAMETRELER</h3>
+
+            <div class="control-group">
+                <div class="control-header"><span>ÇEKMECE AÇILMA (mm)</span></div>
+                <div class="input-wrapper">
+                    <input type="range" id="rangeOpen" min="0" max="400" value="0" oninput="syncInput('Open', this.value)">
+                    <input type="number" id="numOpen" value="0" min="0" max="400" oninput="syncInput('Open', this.value)">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-header"><span>GENİŞLİK (mm)</span></div>
+                <div class="input-wrapper">
+                    <input type="range" id="rangeW" min="300" max="1200" value="600" oninput="syncInput('W', this.value)">
+                    <input type="number" id="numW" value="600" min="300" max="1200" oninput="syncInput('W', this.value)">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-header"><span>GÖVDE YÜKSEKLİĞİ (mm)</span></div>
+                <div class="input-wrapper">
+                    <input type="range" id="rangeH" min="600" max="900" value="720" oninput="syncInput('H', this.value)">
+                    <input type="number" id="numH" value="720" min="600" max="900" oninput="syncInput('H', this.value)">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-header"><span>AYAK YÜKSEKLİĞİ (mm)</span></div>
+                <div class="input-wrapper">
+                    <input type="range" id="rangeLeg" min="80" max="200" value="100" oninput="syncInput('Leg', this.value)">
+                    <input type="number" id="numLeg" value="100" min="80" max="200" oninput="syncInput('Leg', this.value)">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-header"><span>TOPLAM YÜKSEKLİK K (mm)</span></div>
+                <div class="input-wrapper">
+                    <input type="range" id="rangeK" min="650" max="1100" value="820" oninput="syncInput('K', this.value)">
+                    <input type="number" id="numK" value="820" min="650" max="1100" oninput="syncInput('K', this.value)">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-header"><span>MODÜL DERİNLİĞİ (mm)</span></div>
+                <div class="input-wrapper">
+                    <input type="range" id="rangeD" min="450" max="650" value="560" oninput="syncInput('D', this.value)">
+                    <input type="number" id="numD" value="560" min="450" max="650" oninput="syncInput('D', this.value)">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-header"><span>ÇEKMECE ADEDİ (adet)</span></div>
+                <div class="input-wrapper">
+                    <input type="range" id="rangeDrawer" min="1" max="5" value="3" oninput="syncInput('Drawer', this.value)">
+                    <input type="number" id="numDrawer" value="3" min="1" max="5" oninput="syncInput('Drawer', this.value)">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-header"><span>MDF KALINLIĞI (mm)</span></div>
+                <div class="input-wrapper">
+                    <input type="range" id="rangeThickness" min="16" max="25" value="18" oninput="syncInput('Thickness', this.value)">
+                    <input type="number" id="numThickness" value="18" min="16" max="25" oninput="syncInput('Thickness', this.value)">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-header"><span>KERF BOŞLUĞU (mm)</span></div>
+                <div class="input-wrapper">
+                    <input type="range" id="rangeKerf" min="2" max="8" value="3" oninput="syncInput('Kerf', this.value)">
+                    <input type="number" id="numKerf" value="3" min="2" max="8" oninput="syncInput('Kerf', this.value)">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <div class="control-header"><span>ÇEKMECE ÖNÜ RENGİ</span></div>
+                <div class="input-wrapper">
+                    <input type="color" id="doorColor" value="#9ca3af" onchange="updateDrawerColor(this.value)" style="width:50px;height:24px;padding:0;border:none;background:none;">
+                </div>
+            </div>
+
+            <!-- Çekmece iç derinliği – Auto/Manuel -->
+            <div class="control-group">
+                <div class="control-header">
+                    <span>ÇEKMECE İÇ DERİNLİĞİ (mm)</span>
+                    <label style="display:flex;align-items:center;gap:6px;font-size:10px;">
+                        <input type="checkbox" id="chkAutoDrawerDepth" checked onchange="toggleAutoDrawerDepth()"> Otomatik (Modül Derinliği − 50)
+                    </label>
+                </div>
+                <div class="input-wrapper">
+                    <input type="range" id="rangeDrawerInnerDepth" min="100" max="600" value="0" oninput="syncInput('DrawerInnerDepth',this.value)" disabled>
+                    <input type="number" id="numDrawerInnerDepth" value="0" min="100" max="600" oninput="syncInput('DrawerInnerDepth',this.value)" disabled>
+                </div>
+            </div>
+        </div>
+
+        <div class="grand-total-section">
+            <div class="gt-row">
+                <span style="font-size:10px;font-weight:700;letter-spacing:1px;">MODÜL ADEDİ</span>
+                <input type="number" id="inpModuleCount" value="1" min="1" oninput="updateSystem()" class="qty-input">
+            </div>
+            <hr style="border-color:#333; margin:5px 0;">
+            <div class="gt-row">
+                <span style="font-size:12px; font-weight:800;">GENEL TOPLAM</span>
+                <span class="gt-val" id="grandTotalDisplay">0 TL</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/RGBELoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+    <script>
+        let THICKNESS = 18;
+        let SHEET_W = 2100;
+        let SHEET_H = 3000;
+        let KERF_MM = 3;
+        const TOP_RAIL_H = 100;
+        let lastSheets = null;
+        let lastChanged = null;
+        let lastGeom = null;
+        let pendingDraw = null;
+
+        // ---- İDLE / İPUÇLARI ----
+        let idleActive = true;
+        let idleStart = performance.now();
+        let animBaseOpen = 0; // Open parametresinin baz değeri
+
+        // ---- NESTING anim state ----
+        const nestingAnim = {
+            current: 0,
+            target: 0,
+            vel: 0,
+            lastCount: 0
+        };
+
+        // ---- Sade & soft gri palet ----
+        const COLOR_MAP = {
+            SY: "#f9fafb",
+            DY: "#f3f4f6",
+            ALT: "#eceff3",
+            KUS: "#eef1f5",
+            ARK: "#f5f6f8",
+            KP: "#d0d4db",
+            KK: "#e9ecef",
+            CY: "#e5e7eb",
+            CA: "#eceff1",
+            BTM: "#eef2f6"
+        };
+
+        function colorForShort(short, fallback) {
+            return COLOR_MAP[short] || fallback || "#ffffff";
+        }
+
+        // ---------- Yardımcılar ----------
+        function updateSheetSize() {
+            const val = document.getElementById('selSheetSize').value.split(',');
+            SHEET_W = parseInt(val[0]);
+            SHEET_H = parseInt(val[1]);
+            document.getElementById('sheetDimLabel').innerText =
+                `KESİM ŞEMASI (${SHEET_W/10}x${SHEET_H/10} cm)`;
+            updateSystem();
+        }
+
+        function syncInput(type, value) {
+            lastChanged = type;
+            const numEl = document.getElementById('num' + type);
+            const rangeEl = document.getElementById('range' + type);
+            if (numEl) numEl.value = value;
+            if (rangeEl) rangeEl.value = value;
+            updateSystem();
+        }
+
+        function toggleAutoDrawerDepth() {
+            const auto = document.getElementById('chkAutoDrawerDepth').checked;
+            document.getElementById('rangeDrawerInnerDepth').disabled = auto;
+            document.getElementById('numDrawerInnerDepth').disabled = auto;
+            updateSystem();
+        }
+
+        // 2D teknik çizim canvas – sadece görünürken çiz
+        function get2DContext() {
+            const c = document.getElementById('drawingCanvas');
+            const visible = getComputedStyle(c).display !== 'none' && c.offsetParent !== null;
+            if (!visible) {
+                return {
+                    c,
+                    ctx: null,
+                    width: 0,
+                    height: 0,
+                    hidden: true
+                };
+            }
+            const dpr = window.devicePixelRatio || 1;
+            const rect = c.getBoundingClientRect();
+            c.width = rect.width * dpr;
+            c.height = rect.height * dpr;
+            const ctx = c.getContext('2d');
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.translate(0.5, 0.5);
+            return {
+                c,
+                ctx,
+                width: rect.width,
+                height: rect.height,
+                hidden: false
+            };
+        }
+
+        // ---------- 3D SAHNE ----------
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf7f7f7);
+
+        const camera = new THREE.PerspectiveCamera(35, container.clientWidth / container.clientHeight, 1, 5000);
+        camera.position.set(1600, 1300, 1800);
+
+        const renderer = new THREE.WebGLRenderer({
+            antialias: true
+        });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        // Orbit hint gizleme + idle durdurma (yalnızca tıklamayla)
+        const orbitHintEl = document.getElementById('orbitHint');
+        let orbitHintHidden = false;
+
+        function hideOrbitHint() {
+            if (orbitHintHidden) return;
+            orbitHintEl.style.opacity = '0';
+            setTimeout(() => orbitHintEl.style.display = 'none', 300);
+            orbitHintHidden = true;
+        }
+
+        function stopIdle() {
+            if (!idleActive) return;
+            idleActive = false;
+            drawersGroup.children.forEach(g => {
+                g.position.z = 0;
+            });
+            document.getElementById('rangeOpen').value = animBaseOpen;
+            document.getElementById('numOpen').value = animBaseOpen;
+            cabinet.rotation.y = 0;
+        }
+        renderer.domElement.addEventListener('click', () => {
+            hideOrbitHint();
+            stopIdle();
+        }, {
+            passive: true
+        });
+
+        const hemi = new THREE.HemisphereLight(0xffffff, 0xffffff, 0.8);
+        scene.add(hemi);
+        const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+        dir.position.set(800, 1500, 1000);
+        dir.castShadow = true;
+        scene.add(dir);
+
+        new THREE.RGBELoader()
+            .setPath('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/equirectangular/')
+            .load('royal_esplanade_1k.hdr', tex => {
+                tex.mapping = THREE.EquirectangularReflectionMapping;
+                scene.environment = tex;
+                scene.environmentIntensity = 0.4;
+            });
+
+        const texLoader = new THREE.TextureLoader();
+        const matBody = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            roughness: 1,
+            metalness: 0
+        });
+        const matDoor = new THREE.MeshStandardMaterial({
+            color: 0x9ca3af,
+            roughness: 1,
+            metalness: 0
+        });
+        const matBack = new THREE.MeshStandardMaterial({
+            color: 0xeeeeee
+        });
+        const matMetal = new THREE.MeshStandardMaterial({
+            color: 0x222222,
+            roughness: 0.5,
+            metalness: 0.2
+        });
+        const texMinifix = texLoader.load('https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/Cam_lock_fastener.jpg/600px-Cam_lock_fastener.jpg');
+        const matMini = new THREE.MeshBasicMaterial({
+            map: texMinifix
+        });
+
+        function updateDrawerColor(hex) {
+            matDoor.color.set(hex);
+        }
+
+        const cabinet = new THREE.Group();
+        scene.add(cabinet);
+
+        // >>> MODELİ BAŞLANGIÇTA +100px SAĞA ALINDI (önce 290'dı)
+        cabinet.position.x = 390;
+        controls.target.set(390, 400, 0);
+
+        const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+        const boxEdgesGeo = new THREE.EdgesGeometry(boxGeo);
+        const edgeMat = new THREE.LineBasicMaterial({
+            color: 0xCCCCCC,
+            linewidth: 0.5,
+            transparent: true,
+            opacity: 0.6
+        });
+
+        function createPanel(mat) {
+            const m = new THREE.Mesh(boxGeo, mat);
+            m.castShadow = true;
+            m.receiveShadow = true;
+            const edges = new THREE.LineSegments(boxEdgesGeo, edgeMat);
+            m.add(edges);
+            cabinet.add(m);
+            return m;
+        }
+
+        let leftP = createPanel(matBody);
+        let rightP = createPanel(matBody);
+        let bottomP = createPanel(matBody);
+        let backP = createPanel(matBack);
+        let frontRailP = createPanel(matBody);
+        let backRailP = createPanel(matBody);
+
+        // gövde minifiksleri
+        let minifixes = [];
+        for (let i = 0; i < 8; i++) {
+            let m = new THREE.Mesh(new THREE.CircleGeometry(7, 32), matMini);
+            m.rotation.y = Math.PI / 2;
+            cabinet.add(m);
+            minifixes.push(m);
+        }
+
+        // ayaklar
+        let legsGroup = new THREE.Group();
+        cabinet.add(legsGroup);
+        const legGeo = new THREE.CylinderGeometry(18, 18, 1, 16);
+        const legMat = new THREE.MeshStandardMaterial({
+            color: 0x111111,
+            roughness: 0.4,
+            metalness: 0.2
+        });
+
+        // çekmeceler
+        let drawersGroup = new THREE.Group();
+        cabinet.add(drawersGroup);
+
+        const dom = {
+            W: document.getElementById('numW'),
+            H: document.getElementById('numH'),
+            D: document.getElementById('numD'),
+            Leg: document.getElementById('numLeg'),
+            K: document.getElementById('numK'),
+            Kerf: document.getElementById('numKerf'),
+            Open: document.getElementById('numOpen'),
+            Thickness: document.getElementById('numThickness'),
+            Drawer: document.getElementById('numDrawer'),
+            Price: document.getElementById('inpUnitPrice'),
+            HPrice: document.getElementById('inpHingePrice'),
+            MPrice: document.getElementById('inpMiniPrice'),
+            PPrice: document.getElementById('inpPinPrice'),
+            HanPrice: document.getElementById('inpHandlePrice'),
+            LegPrice: document.getElementById('inpLegPrice'),
+            Labor: document.getElementById('inpLaborPercent'),
+            Count: document.getElementById('inpModuleCount')
+        };
+
+        // ---------------- ANA GÜNCELLEME ----------------
+        function updateSystem() {
+            THICKNESS = parseInt(dom.Thickness.value) || 18;
+            KERF_MM = parseFloat(dom.Kerf.value) || 3;
+
+            let W = parseInt(dom.W.value) || 0;
+            let H = parseInt(dom.H.value) || 0;
+            let D = parseInt(dom.D.value) || 0;
+            let LegH = parseInt(dom.Leg.value) || 0;
+            let K = parseInt(dom.K.value) || 0;
+            let DrawerCount = parseInt(dom.Drawer.value) || 1;
+
+            const M2Price = parseFloat(dom.Price.value) || 0;
+            const RailPrice = parseFloat(dom.HPrice.value) || 0;
+            const MiniPrice = parseFloat(dom.MPrice.value) || 0;
+            const ScrewPrice = parseFloat(dom.PPrice.value) || 0;
+            const HandlePrice = parseFloat(dom.HanPrice.value) || 0;
+            const LegUnitPrice = parseFloat(dom.LegPrice.value) || 0;
+            const LaborPercent = parseFloat(dom.Labor.value) || 0;
+            const ModuleCount = parseInt(dom.Count.value) || 1;
+
+            if (DrawerCount < 1) DrawerCount = 1;
+
+            if (!K) K = H + LegH;
+            if (lastChanged === 'K') {
+                H = K - LegH;
+                if (H < 300) H = 300;
+                dom.H.value = H;
+                document.getElementById('rangeH').value = H;
+            } else if (lastChanged === 'H' || lastChanged === 'Leg') {
+                K = H + LegH;
+                dom.K.value = K;
+                document.getElementById('rangeK').value = K;
+            } else {
+                K = H + LegH;
+                dom.K.value = K;
+                document.getElementById('rangeK').value = K;
+            }
+
+            const D_NET = Math.max(0, D - THICKNESS);
+            const inW = W - (THICKNESS * 2);
+
+            const cY = LegH + H / 2;
+            const baseY = LegH;
+
+            // gövde
+            leftP.scale.set(THICKNESS, H, D_NET);
+            leftP.position.set(cabinet.position.x - W / 2 + THICKNESS / 2, cY, 0);
+
+            rightP.scale.set(THICKNESS, H, D_NET);
+            rightP.position.set(cabinet.position.x + W / 2 - THICKNESS / 2, cY, 0);
+
+            bottomP.scale.set(inW, THICKNESS, D_NET);
+            bottomP.position.set(cabinet.position.x, baseY + THICKNESS / 2, 0);
+
+            backP.scale.set(W, H, 3);
+            backP.position.set(cabinet.position.x, cY, -D_NET / 2);
+
+            frontRailP.scale.set(inW, THICKNESS, TOP_RAIL_H);
+            frontRailP.position.set(cabinet.position.x, LegH + H - THICKNESS / 2, D_NET / 2 - TOP_RAIL_H / 2);
+
+            backRailP.scale.set(inW, THICKNESS, TOP_RAIL_H);
+            backRailP.position.set(cabinet.position.x, LegH + H - THICKNESS / 2, -D_NET / 2 + TOP_RAIL_H / 2);
+
+            // gövde minifiks konumları
+            const baseX = cabinet.position.x;
+            minifixes[0].position.set(baseX - W / 2 + 19, LegH + H - 20, D_NET / 2 - 50);
+            minifixes[1].position.set(baseX - W / 2 + 19, LegH + H - 20, -D_NET / 2 + 50);
+            minifixes[2].position.set(baseX - W / 2 + 19, LegH + 20, D_NET / 2 - 50);
+            minifixes[3].position.set(baseX - W / 2 + 19, LegH + 20, -D_NET / 2 + 50);
+            minifixes[4].position.set(baseX + W / 2 - 19, LegH + H - 20, D_NET / 2 - 50);
+            minifixes[4].rotation.y = -Math.PI / 2;
+            minifixes[5].position.set(baseX + W / 2 - 19, LegH + H - 20, -D_NET / 2 + 50);
+            minifixes[5].rotation.y = -Math.PI / 2;
+            minifixes[6].position.set(baseX + W / 2 - 19, LegH + 20, D_NET / 2 - 50);
+            minifixes[6].rotation.y = -Math.PI / 2;
+            minifixes[7].position.set(baseX + W / 2 - 19, LegH + 20, -D_NET / 2 + 50);
+            minifixes[7].rotation.y = -Math.PI / 2;
+
+            // ayaklar
+            while (legsGroup.children.length > 0) legsGroup.remove(legsGroup.children[0]);
+            const legPositions = [];
+            const halfW = W / 2;
+            const halfD = D_NET / 2;
+            const inset = 40;
+            legPositions.push({
+                x: baseX - halfW + inset,
+                z: halfD - inset
+            }, {
+                x: baseX + halfW - inset,
+                z: halfD - inset
+            }, {
+                x: baseX - halfW + inset,
+                z: -halfD + inset
+            }, {
+                x: baseX + halfW - inset,
+                z: -halfD + inset
+            });
+            if (W > 600 && W <= 900) {
+                legPositions.push({
+                    x: baseX,
+                    z: -halfD + inset
+                });
+            } else if (W > 900) {
+                legPositions.push({
+                    x: baseX,
+                    z: halfD - inset
+                }, {
+                    x: baseX,
+                    z: -halfD + inset
+                });
+            }
+            legPositions.forEach(pos => {
+                const leg = new THREE.Mesh(legGeo, legMat);
+                leg.castShadow = true;
+                leg.receiveShadow = true;
+                leg.scale.set(1, LegH, 1);
+                leg.position.set(pos.x, LegH / 2, pos.z);
+                legsGroup.add(leg);
+            });
+            const legCount = legPositions.length;
+
+            // ÇEKMECELER
+            while (drawersGroup.children.length > 0) drawersGroup.remove(drawersGroup.children[0]);
+
+            const FRONT_GAP = 3; // mm – kapak arası boşluk
+            const frontTotalHeight = H - 4;
+            const drawerFrontH = (frontTotalHeight - FRONT_GAP * (DrawerCount - 1)) / DrawerCount;
+            const drawerFrontW = W - 4;
+
+            const maxOpen = Math.max(0, D_NET - 150);
+            const userOpen = Math.min(parseInt(dom.Open.value) || 0, maxOpen);
+            animBaseOpen = userOpen; // idle için baz open değerini güncelle
+
+            // Çekmece iç derinliği
+            const autoDepth = document.getElementById('chkAutoDrawerDepth').checked;
+            const depRange = document.getElementById('rangeDrawerInnerDepth');
+            const depNum = document.getElementById('numDrawerInnerDepth');
+            depRange.max = Math.max(100, D_NET - 10);
+            depNum.max = depRange.max;
+            depRange.min = 100;
+            depNum.min = 100;
+
+            let drawerInnerDepth;
+            if (autoDepth) {
+                drawerInnerDepth = Math.max(100, D_NET - 50);
+                depRange.value = drawerInnerDepth;
+                depNum.value = drawerInnerDepth;
+            } else {
+                drawerInnerDepth = parseInt(depNum.value) || parseInt(depRange.value) || Math.max(100, D_NET - 50);
+                const maxAllowed = Math.max(100, D_NET - 10);
+                drawerInnerDepth = Math.min(Math.max(100, drawerInnerDepth), maxAllowed);
+                depRange.value = drawerInnerDepth;
+                depNum.value = drawerInnerDepth;
+            }
+
+            const drawerInnerWidth = Math.max(0, inW - 20);
+            const bottomTH = 8;
+
+            let drawerMiniPerDrawer = 0;
+
+            for (let i = 0; i < DrawerCount; i++) {
+                const g = new THREE.Group();
+
+                // Kapak merkez Y: boşlukla ayrılır
+                const yStart = LegH + 2 + drawerFrontH / 2;
+                const centerY = yStart + i * (drawerFrontH + FRONT_GAP);
+
+                const sideHeightMM = i === 0 ?
+                    Math.max(50, drawerFrontH - 70) :
+                    Math.max(50, drawerFrontH - 30);
+
+                let boxYOffset = 0;
+                {
+                    const tmpBoxY = centerY - 10;
+                    const tmpBottomBottom = tmpBoxY - sideHeightMM / 2;
+                    const cabinetBottomTop = LegH + THICKNESS;
+                    const neededBottomBottom = cabinetBottomTop + 20;
+                    const delta = neededBottomBottom - tmpBottomBottom;
+                    if (i === 0 && delta > 0) boxYOffset = delta;
+                }
+                const boxY = centerY - 10 + boxYOffset;
+
+                const openDist = userOpen;
+
+                const frontCenterZ = D_NET / 2 + THICKNESS / 2 + openDist;
+                let front = new THREE.Mesh(boxGeo, matDoor);
+                front.castShadow = true;
+                front.receiveShadow = true;
+                front.scale.set(drawerFrontW, drawerFrontH, THICKNESS);
+                front.position.set(cabinet.position.x, centerY, frontCenterZ);
+                front.add(new THREE.LineSegments(boxEdgesGeo, edgeMat));
+                g.add(front);
+
+                const coreCenterZ = D_NET / 2 - THICKNESS / 2 + openDist;
+                let core = new THREE.Mesh(boxGeo, matBody);
+                core.castShadow = true;
+                core.receiveShadow = true;
+                core.scale.set(drawerInnerWidth, sideHeightMM, THICKNESS);
+                core.position.set(cabinet.position.x, boxY, coreCenterZ);
+                core.add(new THREE.LineSegments(boxEdgesGeo, edgeMat));
+                g.add(core);
+
+                const sideCenterZ = coreCenterZ - THICKNESS / 2 - drawerInnerDepth / 2;
+
+                let leftSide = new THREE.Mesh(boxGeo, matBody);
+                leftSide.castShadow = true;
+                leftSide.receiveShadow = true;
+                leftSide.scale.set(THICKNESS, sideHeightMM, drawerInnerDepth);
+                leftSide.position.set(cabinet.position.x - drawerInnerWidth / 2 + THICKNESS / 2, boxY, sideCenterZ);
+                leftSide.add(new THREE.LineSegments(boxEdgesGeo, edgeMat));
+                g.add(leftSide);
+
+                let rightSide = new THREE.Mesh(boxGeo, matBody);
+                rightSide.castShadow = true;
+                rightSide.receiveShadow = true;
+                rightSide.scale.set(THICKNESS, sideHeightMM, drawerInnerDepth);
+                rightSide.position.set(cabinet.position.x + drawerInnerWidth / 2 - THICKNESS / 2, boxY, sideCenterZ);
+                rightSide.add(new THREE.LineSegments(boxEdgesGeo, edgeMat));
+                g.add(rightSide);
+
+                const backPanelZ = sideCenterZ - drawerInnerDepth / 2 - THICKNESS / 2;
+                let backPanel = new THREE.Mesh(boxGeo, matBody);
+                backPanel.castShadow = true;
+                backPanel.receiveShadow = true;
+                backPanel.scale.set(drawerInnerWidth, sideHeightMM, THICKNESS);
+                backPanel.position.set(cabinet.position.x, boxY, backPanelZ);
+                backPanel.add(new THREE.LineSegments(boxEdgesGeo, edgeMat));
+                g.add(backPanel);
+
+                const bottomCenterY = boxY - sideHeightMM / 2 + bottomTH / 2;
+                let bottomPanel = new THREE.Mesh(boxGeo, matBody);
+                bottomPanel.castShadow = true;
+                bottomPanel.receiveShadow = true;
+                bottomPanel.scale.set(drawerInnerWidth, bottomTH, drawerInnerDepth);
+                bottomPanel.position.set(cabinet.position.x, bottomCenterY, sideCenterZ);
+                bottomPanel.add(new THREE.LineSegments(boxEdgesGeo, edgeMat));
+                g.add(bottomPanel);
+
+                // minifiksler
+                const miniGeoDrawer = new THREE.CircleGeometry(5, 16);
+
+                function addMini(x, y, z, ry) {
+                    const m = new THREE.Mesh(miniGeoDrawer, matMini);
+                    m.position.set(x, y, z);
+                    m.rotation.y = ry;
+                    g.add(m);
+                }
+                const miniY = boxY;
+                addMini(cabinet.position.x - drawerInnerWidth / 2 + THICKNESS, miniY, coreCenterZ + THICKNESS / 2, Math.PI / 2);
+                addMini(cabinet.position.x + drawerInnerWidth / 2 - THICKNESS, miniY, coreCenterZ + THICKNESS / 2, -Math.PI / 2);
+                addMini(cabinet.position.x - drawerInnerWidth / 2 + THICKNESS, miniY, backPanelZ - THICKNESS / 2, Math.PI / 2);
+                addMini(cabinet.position.x + drawerInnerWidth / 2 - THICKNESS, miniY, backPanelZ - THICKNESS / 2, -Math.PI / 2);
+                drawerMiniPerDrawer = 4;
+
+                // raylar
+                const railLen = drawerInnerDepth - 40;
+                const railH = 10;
+                const railT = 6;
+                const railY = boxY - sideHeightMM / 3;
+
+                let leftRail = new THREE.Mesh(boxGeo, matMetal);
+                leftRail.castShadow = true;
+                leftRail.receiveShadow = true;
+                leftRail.scale.set(railT, railH, railLen);
+                leftRail.position.set(cabinet.position.x - drawerInnerWidth / 2 - railT / 2, railY, sideCenterZ);
+                g.add(leftRail);
+
+                let rightRail = new THREE.Mesh(boxGeo, matMetal);
+                rightRail.castShadow = true;
+                rightRail.receiveShadow = true;
+                rightRail.scale.set(railT, railH, railLen);
+                rightRail.position.set(cabinet.position.x + drawerInnerWidth / 2 + railT / 2, railY, sideCenterZ);
+                g.add(rightRail);
+
+                // kulp
+                let handle = new THREE.Mesh(boxGeo, matMetal);
+                handle.castShadow = true;
+                handle.receiveShadow = true;
+                handle.scale.set(80, 8, 10);
+                handle.position.set(cabinet.position.x, centerY, frontCenterZ + THICKNESS / 2 + 5);
+                g.add(handle);
+
+                drawersGroup.add(g);
+            }
+
+            // nesting parça listesi
+            const nestingParts = [];
+            nestingParts.push({
+                w: D_NET,
+                h: H,
+                name: "Sol Yan",
+                short: "SY"
+            }, {
+                w: D_NET,
+                h: H,
+                name: "Sağ Yan",
+                short: "DY"
+            }, {
+                w: D_NET,
+                h: inW,
+                name: "Alt Tabla",
+                short: "ALT"
+            }, {
+                w: TOP_RAIL_H,
+                h: inW,
+                name: "Ön Kuşak",
+                short: "KUS"
+            }, {
+                w: TOP_RAIL_H,
+                h: inW,
+                name: "Arka Kuşak",
+                short: "KUS"
+            }, {
+                w: W,
+                h: H,
+                name: "Arkalık",
+                short: "ARK"
+            });
+            const sideHeightBottom = Math.max(50, drawerFrontH - 70);
+            const sideHeightOther = Math.max(50, drawerFrontH - 30);
+
+            for (let i = 0; i < DrawerCount; i++) {
+                const isBottom = (i === 0);
+                const hCore = isBottom ? sideHeightBottom : sideHeightOther;
+                const hSide = isBottom ? sideHeightBottom : sideHeightOther;
+                const hBack = isBottom ? sideHeightBottom : sideHeightOther;
+
+                nestingParts.push({
+                    w: drawerFrontH,
+                    h: drawerFrontW,
+                    name: `Çekmece Kapak ${i+1}`,
+                    short: "KP"
+                });
+                nestingParts.push({
+                    w: hCore,
+                    h: drawerInnerWidth,
+                    name: `Kor Klapa ${i+1}`,
+                    short: "KK"
+                });
+                nestingParts.push({
+                    w: hSide,
+                    h: drawerInnerDepth,
+                    name: `Çekmece Yan Sağ ${i+1}`,
+                    short: "CY"
+                });
+                nestingParts.push({
+                    w: hSide,
+                    h: drawerInnerDepth,
+                    name: `Çekmece Yan Sol ${i+1}`,
+                    short: "CY"
+                });
+                nestingParts.push({
+                    w: hBack,
+                    h: drawerInnerWidth,
+                    name: `Çekmece Arkalık ${i+1}`,
+                    short: "CA"
+                });
+                nestingParts.push({
+                    w: drawerInnerWidth,
+                    h: drawerInnerDepth,
+                    name: `Çekmece Altı ${i+1}`,
+                    short: "BTM"
+                });
+            }
+
+            drawNestingOptimized(nestingParts);
+
+            updateData({
+                W,
+                H,
+                D_NET,
+                inW,
+                THICKNESS,
+                drawerCount: DrawerCount,
+                drawerFrontH,
+                drawerFrontW,
+                drawerInnerWidth,
+                drawerInnerDepth,
+                sideHeightBottom,
+                sideHeightOther,
+                bottomTH,
+                legCount,
+                legUnitPrice: LegUnitPrice,
+                m2Price: M2Price,
+                railPrice: RailPrice,
+                miniPrice: MiniPrice,
+                screwPrice: ScrewPrice,
+                handlePrice: HandlePrice,
+                quantity: ModuleCount,
+                laborPerc: LaborPercent,
+                drawerMiniPerDrawer,
+                LegH
+            });
+
+            lastGeom = {
+                W,
+                H,
+                D_NET,
+                LegH,
+                drawerCount: DrawerCount,
+                drawerFrontH,
+                drawerInnerDepth,
+                legInset: 40,
+                THICKNESS,
+                drawerInnerWidth,
+                sideHeightBottom,
+                sideHeightOther,
+                frontGap: FRONT_GAP
+            };
+
+            draw2DViews(lastGeom);
+        }
+
+        // ---------- MALİYET / LİSTE ----------
+        function updateData(cfg) {
+            const {
+                W,
+                H,
+                D_NET,
+                inW,
+                THICKNESS,
+                drawerCount,
+                drawerFrontH,
+                drawerFrontW,
+                drawerInnerWidth,
+                drawerInnerDepth,
+                sideHeightBottom,
+                sideHeightOther,
+                bottomTH,
+                legCount,
+                legUnitPrice,
+                m2Price,
+                railPrice,
+                miniPrice,
+                screwPrice,
+                handlePrice,
+                quantity,
+                laborPerc,
+                drawerMiniPerDrawer
+            } = cfg;
+
+            const areaSolYan = (H * D_NET) / 1_000_000;
+            const areaSagYan = (H * D_NET) / 1_000_000;
+            const areaAlt = (inW * D_NET) / 1_000_000;
+            const areaFrontK = (inW * TOP_RAIL_H) / 1_000_000;
+            const areaBackK = (inW * TOP_RAIL_H) / 1_000_000;
+            const areaArkalik = (H * W) / 1_000_000;
+
+            const areaFrontOne = (drawerFrontW * drawerFrontH) / 1_000_000;
+
+            const areaCoreBottom = (drawerInnerWidth * sideHeightBottom) / 1_000_000;
+            const areaCoreOther = (drawerInnerWidth * sideHeightOther) / 1_000_000;
+            const areaSidesBottom = 2 * ((sideHeightBottom * drawerInnerDepth) / 1_000_000);
+            const areaSidesOther = 2 * ((sideHeightOther * drawerInnerDepth) / 1_000_000);
+            const areaBackBottom = (drawerInnerWidth * sideHeightBottom) / 1_000_000;
+            const areaBackOther = (drawerInnerWidth * sideHeightOther) / 1_000_000;
+
+            const areaBottomOne = (drawerInnerWidth * drawerInnerDepth) / 1_000_000;
+
+            const totalFronts = areaFrontOne * drawerCount;
+            const totalCores = areaCoreBottom + (drawerCount - 1) * areaCoreOther;
+            const totalSides = areaSidesBottom + (drawerCount - 1) * areaSidesOther;
+            const totalBacks = areaBackBottom + (drawerCount - 1) * areaBackOther;
+            const totalBottoms = areaBottomOne * drawerCount;
+
+            const totalAreaM2 =
+                areaSolYan + areaSagYan + areaAlt + areaFrontK + areaBackK + areaArkalik +
+                totalFronts + totalCores + totalSides + totalBacks + totalBottoms;
+
+            const materialCost = totalAreaM2 * m2Price;
+
+            const railCount = drawerCount;
+            const miniBody = 8;
+            const miniDrawers = drawerCount * drawerMiniPerDrawer;
+            const miniCount = miniBody + miniDrawers;
+            const screwCount = 12;
+            const handleCount = drawerCount;
+
+            const hardwareCost =
+                (railCount * railPrice) +
+                (miniCount * miniPrice) +
+                (screwCount * screwPrice) +
+                (handleCount * handlePrice) +
+                (legCount * legUnitPrice);
+
+            const rawCost = materialCost + hardwareCost;
+            const unitTotal = Math.round(rawCost * (1 + laborPerc / 100));
+
+            document.getElementById('unitPriceDisplay').innerText =
+                unitTotal.toLocaleString('tr-TR') + " TL";
+            document.getElementById('grandTotalDisplay').innerText =
+                (unitTotal * quantity).toLocaleString('tr-TR') + " TL";
+
+            const f3 = v => v.toFixed(3);
+
+            document.getElementById('woodList').innerHTML = `
+    <tr><td>Sol Yan</td><td>1</td>
+      <td style="text-align:right">${H}x${D_NET}x${THICKNESS}</td>
+      <td style="text-align:right">${f3(areaSolYan)}</td>
+    </tr>
+    <tr><td>Sağ Yan</td><td>1</td>
+      <td style="text-align:right">${H}x${D_NET}x${THICKNESS}</td>
+      <td style="text-align:right">${f3(areaSagYan)}</td>
+    </tr>
+    <tr><td>Alt Tabla</td><td>1</td>
+      <td style="text-align:right">${inW}x${D_NET}x${THICKNESS}</td>
+      <td style="text-align:right">${f3(areaAlt)}</td>
+    </tr>
+    <tr><td>Üst Ön Kuşak</td><td>1</td>
+      <td style="text-align:right">${inW}x${TOP_RAIL_H}x${THICKNESS}</td>
+      <td style="text-align:right">${f3(areaFrontK)}</td>
+    </tr>
+    <tr><td>Üst Arka Kuşak</td><td>1</td>
+      <td style="text-align:right">${inW}x${TOP_RAIL_H}x${THICKNESS}</td>
+      <td style="text-align:right">${f3(areaBackK)}</td>
+    </tr>
+    <tr><td>Arkalık</td><td>1</td>
+      <td style="text-align:right">${H}x${W}x3</td>
+      <td style="text-align:right">${f3(areaArkalik)}</td>
+    </tr>
+    <tr><td>Çekmece Kapak</td><td>${drawerCount}</td>
+      <td style="text-align:right">${Math.round(drawerFrontH)}x${Math.round(drawerFrontW)}x${THICKNESS}</td>
+      <td style="text-align:right">${f3(totalFronts)}</td>
+    </tr>
+    <tr><td>Kor Klapa</td><td>${drawerCount}</td>
+      <td style="text-align:right">${Math.round(sideHeightOther)} / ${Math.round(sideHeightBottom)}x${Math.round(drawerInnerWidth)}x${THICKNESS}</td>
+      <td style="text-align:right">${f3(totalCores)}</td>
+    </tr>
+    <tr><td>Çekmece Yan</td><td>${drawerCount*2}</td>
+      <td style="text-align:right">${Math.round(sideHeightOther)} / ${Math.round(sideHeightBottom)}x${Math.round(drawerInnerDepth)}x${THICKNESS}</td>
+      <td style="text-align:right">${f3(totalSides)}</td>
+    </tr>
+    <tr><td>Çekmece Arkalık</td><td>${drawerCount}</td>
+      <td style="text-align:right">${Math.round(sideHeightOther)} / ${Math.round(sideHeightBottom)}x${Math.round(drawerInnerWidth)}x${THICKNESS}</td>
+      <td style="text-align:right">${f3(totalBacks)}</td>
+    </tr>
+    <tr><td>Çekmece Altı (8mm)</td><td>${drawerCount}</td>
+      <td style="text-align:right">${Math.round(drawerInnerWidth)}x${Math.round(drawerInnerDepth)}x8</td>
+      <td style="text-align:right">${f3(totalBottoms)}</td>
+    </tr>
+    <tr>
+      <td style="font-weight:700;">TOPLAM MDF</td>
+      <td></td><td></td>
+      <td style="text-align:right;font-weight:700;">${f3(totalAreaM2)}</td>
+    </tr>
+  `;
+
+            document.getElementById('hardwareList').innerHTML = `
+    <tr><td>Ray Takımı (çift)</td><td style="text-align:right">${railCount}</td></tr>
+    <tr><td>Minifiks</td><td style="text-align:right">${miniCount}</td></tr>
+    <tr><td>Vida</td><td style="text-align:right">${screwCount}</td></tr>
+    <tr><td>Kulp</td><td style="text-align:right">${handleCount}</td></tr>
+    <tr><td>Ayak</td><td style="text-align:right">${legCount}</td></tr>
+  `;
+        }
+
+        // --------- 2D ÜRETİM ÇİZİMLERİ ----------
+        function draw2DViews(params) {
+            const visCtx = get2DContext();
+            if (visCtx.hidden || !visCtx.ctx) {
+                pendingDraw = params;
+                return;
+            }
+            pendingDraw = null;
+
+            const {
+                W,
+                H,
+                D_NET,
+                LegH,
+                drawerCount,
+                drawerFrontH,
+                drawerInnerDepth,
+                legInset,
+                THICKNESS,
+                drawerInnerWidth,
+                sideHeightBottom,
+                sideHeightOther,
+                frontGap
+            } = params;
+
+            const {
+                c,
+                ctx,
+                width: Wpx,
+                height: Hpx
+            } = visCtx;
+
+            ctx.clearRect(0, 0, Wpx, Hpx);
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, Wpx, Hpx);
+
+            const cellW = Wpx / 2;
+            const cellH = Hpx / 2;
+            const margin = 18;
+
+            const scaleFront = (cw, ch) => Math.min((cw - 2 * margin) / 1200, (ch - 2 * margin) / 1100);
+            const scalePlan = (cw, ch) => Math.min((cw - 2 * margin) / 1200, (ch - 2 * margin) / 650);
+
+            ctx.font = "10px Inter";
+            ctx.textBaseline = "top";
+            ctx.fillStyle = "#000";
+
+            // 1) Kapaklı görünüş (gap ile)
+            (function() {
+                const ox = 0,
+                    oy = 0;
+                const s = scaleFront(cellW, cellH);
+                const wpx = W * s;
+                const gapPx = frontGap * s;
+                const yBottom = oy + cellH - margin;
+                const x0 = ox + (cellW - wpx) / 2;
+
+                ctx.textAlign = "center";
+                ctx.fillText("KAPAKLI GÖRÜNÜŞ", ox + cellW / 2, oy + 2);
+
+                ctx.save();
+                ctx.strokeStyle = "#000";
+                const legHpx = LegH * s;
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.moveTo(x0, yBottom - legHpx);
+                ctx.lineTo(x0 + wpx, yBottom - legHpx);
+                ctx.stroke();
+
+                const dH = drawerFrontH * s;
+                let yFront = yBottom - legHpx - dH;
+                for (let i = 0; i < drawerCount; i++) {
+                    ctx.lineWidth = 1.1;
+                    ctx.strokeRect(x0 + 2, yFront, wpx - 4, dH);
+                    const handleW = Math.min(80 * s, (wpx - 24));
+                    const hx0 = x0 + (wpx - handleW) / 2;
+                    const hy = yFront + dH / 2;
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(hx0, hy);
+                    ctx.lineTo(hx0 + handleW, hy);
+                    ctx.stroke();
+                    if (i < drawerCount - 1) {
+                        const gapY = yFront - gapPx;
+                        ctx.setLineDash([3, 3]);
+                        ctx.beginPath();
+                        ctx.moveTo(x0 + 6, gapY);
+                        ctx.lineTo(x0 + wpx - 6, gapY);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    }
+                    yFront -= (dH + gapPx);
+                }
+
+                const legWpx = 36 * s;
+                const insetPx = legInset * s;
+                ctx.lineWidth = 1.2;
+                ctx.strokeRect(x0 + insetPx, yBottom - legHpx, legWpx, legHpx);
+                ctx.strokeRect(x0 + wpx - insetPx - legWpx, yBottom - legHpx, legWpx, legHpx);
+                ctx.restore();
+            })();
+
+            // 2) Kapaksız görünüş (gap ile)
+            (function() {
+                const ox = cellW,
+                    oy = 0;
+                const s = scaleFront(cellW, cellH);
+                const wpx = W * s;
+                const gapPx = frontGap * s;
+                const x0 = ox + (cellW - wpx) / 2;
+                const yBottom = oy + cellH - margin;
+
+                ctx.textAlign = "center";
+                ctx.fillText("KAPAKSIZ GÖRÜNÜŞ", ox + cellW / 2, oy + 2);
+
+                ctx.save();
+                ctx.strokeStyle = "#000";
+
+                const legHpx = LegH * s;
+                const carcassTop = yBottom - legHpx - H * s;
+
+                ctx.lineWidth = 1.2;
+                ctx.strokeRect(x0 + THICKNESS * s, carcassTop, wpx - 2 * THICKNESS * s, H * s);
+
+                ctx.beginPath();
+                ctx.moveTo(x0 + THICKNESS * s, carcassTop + (H - THICKNESS) * s);
+                ctx.lineTo(x0 + wpx - THICKNESS * s, carcassTop + (H - THICKNESS) * s);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(x0 + THICKNESS * s, carcassTop + THICKNESS * s);
+                ctx.lineTo(x0 + wpx - THICKNESS * s, carcassTop + THICKNESS * s);
+                ctx.stroke();
+
+                const dH = drawerFrontH * s;
+                let yFront = yBottom - legHpx - dH;
+                for (let i = 0; i < drawerCount; i++) {
+                    const sideMM = (i === 0 ? sideHeightBottom : sideHeightOther);
+                    const boxHeightPx = sideMM * s;
+                    const boxBottom = yFront + (dH - boxHeightPx) / 2;
+
+                    ctx.lineWidth = 1.1;
+                    ctx.strokeRect(x0 + THICKNESS * s + 2, boxBottom, wpx - 2 * (THICKNESS * s + 2), boxHeightPx);
+
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(x0 + THICKNESS * s + 4, boxBottom + boxHeightPx / 3);
+                    ctx.lineTo(x0 + wpx - THICKNESS * s - 4, boxBottom + boxHeightPx / 3);
+                    ctx.stroke();
+
+                    if (i < drawerCount - 1) {
+                        const gapY = yFront - gapPx;
+                        ctx.setLineDash([3, 3]);
+                        ctx.beginPath();
+                        ctx.moveTo(x0 + THICKNESS * s + 4, gapY);
+                        ctx.lineTo(x0 + wpx - THICKNESS * s - 4, gapY);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    }
+
+                    yFront -= (dH + gapPx);
+                }
+
+                const legWpx = 36 * s;
+                const insetPx = legInset * s;
+                ctx.lineWidth = 1.2;
+                ctx.strokeRect(x0 + insetPx, yBottom - legHpx, legWpx, legHpx);
+                ctx.strokeRect(x0 + wpx - insetPx - legWpx, yBottom - legHpx, legWpx, legHpx);
+                ctx.restore();
+            })();
+
+            // 3) Plan
+            (function() {
+                const ox = 0;
+                const oy = cellH;
+                const s = scalePlan(cellW, cellH);
+                const wpx = W * s;
+                const hpx = D_NET * s;
+                const x0 = ox + (cellW - wpx) / 2;
+                const y0 = oy + margin;
+
+                ctx.textAlign = "center";
+                ctx.fillText("PLAN  (KESİT A-A ÇİZGİSİ)", ox + cellW / 2, oy + 2);
+
+                ctx.save();
+                ctx.strokeStyle = "#000";
+
+                const t = THICKNESS * s;
+                const inWpx = wpx - 2 * t;
+                const railHpx = TOP_RAIL_H * s;
+
+                ctx.lineWidth = 1.2;
+                ctx.strokeRect(x0, y0, t, hpx);
+                ctx.strokeRect(x0 + wpx - t, y0, t, hpx);
+
+                ctx.lineWidth = 1.2;
+                ctx.strokeRect(x0 + t, y0 + 4, inWpx, railHpx - 8);
+                ctx.strokeRect(x0 + t, y0 + hpx - railHpx + 4, inWpx, railHpx - 8);
+
+                const inset = 40 * s;
+                const legSize = 36 * s;
+                const lp = [{
+                        x: x0 + inset,
+                        y: y0 + inset
+                    },
+                    {
+                        x: x0 + wpx - inset - legSize,
+                        y: y0 + inset
+                    },
+                    {
+                        x: x0 + inset,
+                        y: y0 + hpx - inset - legSize
+                    },
+                    {
+                        x: x0 + wpx - inset - legSize,
+                        y: y0 + hpx - inset - legSize
+                    }
+                ];
+                if (wpx / s > 600 && wpx / s <= 900) {
+                    lp.push({
+                        x: x0 + (wpx - legSize) / 2,
+                        y: y0 + hpx - inset - legSize
+                    });
+                } else if (wpx / s > 900) {
+                    lp.push({
+                        x: x0 + (wpx - legSize) / 2,
+                        y: y0 + inset
+                    }, {
+                        x: x0 + (wpx - legSize) / 2,
+                        y: y0 + hpx - inset - legSize
+                    });
+                }
+                ctx.lineWidth = 1.2;
+                lp.forEach(p => ctx.strokeRect(p.x, p.y, legSize, legSize));
+
+                const innerSideOff = (THICKNESS + 5) * s;
+                const innerWpx = (drawerInnerWidth) * s;
+                const innerDepthPx = drawerInnerDepth * s;
+                const frontMarginPx = 10 * s;
+                const baseY = y0 + frontMarginPx;
+
+                ctx.lineWidth = 1.1;
+                for (let i = 0; i < drawerCount; i++) {
+                    const y = baseY + i * (3 * s);
+                    ctx.strokeRect(x0 + innerSideOff, y, innerWpx, innerDepthPx);
+                }
+
+                const secX = x0 + wpx / 2;
+                ctx.setLineDash([5, 4]);
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(secX, y0 - 6);
+                ctx.lineTo(secX, y0 + hpx + 6);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                ctx.font = "9px Inter";
+                ctx.textAlign = "left";
+                ctx.fillText("A", secX + 3, y0 - 12);
+                ctx.fillText("A", secX + 3, y0 + hpx + 2);
+
+                ctx.restore();
+            })();
+
+            // 4) Kesit A-A (gap ile)
+            (function() {
+                const ox = cellW;
+                const oy = cellH;
+                const s = scaleFront(cellW, cellH);
+                const wpx = D_NET * s;
+                const gapPx = frontGap * s;
+                const x0 = ox + (cellW - wpx) / 2;
+                const yBottom = oy + cellH - margin;
+
+                ctx.textAlign = "center";
+                ctx.fillText("KESİT A-A", ox + cellW / 2, oy + 2);
+
+                ctx.save();
+                ctx.strokeStyle = "#000";
+
+                const legHpx = LegH * s;
+                const carcassTop = yBottom - legHpx - H * s;
+
+                ctx.lineWidth = 1.2;
+                ctx.strokeRect(x0 + THICKNESS * s, carcassTop, wpx - 2 * THICKNESS * s, H * s);
+
+                ctx.beginPath();
+                ctx.lineWidth = 1;
+                ctx.moveTo(x0 + THICKNESS * s, carcassTop + (H - THICKNESS) * s);
+                ctx.lineTo(x0 + wpx - THICKNESS * s, carcassTop + (H - THICKNESS) * s);
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(x0 + THICKNESS * s, carcassTop + THICKNESS * s);
+                ctx.lineTo(x0 + wpx - THICKNESS * s, carcassTop + THICKNESS * s);
+                ctx.stroke();
+
+                const legWidthPx = 36 * s;
+                const insetPx = 40 * s;
+                const feetY = yBottom;
+                ctx.lineWidth = 1.2;
+                ctx.strokeRect(x0 + insetPx, feetY - legHpx, legWidthPx, legHpx);
+                ctx.strokeRect(x0 + wpx - insetPx - legWidthPx, feetY - legHpx, legWidthPx, legHpx);
+
+                const dH = drawerFrontH * s;
+                let yFront = yBottom - legHpx - dH;
+                for (let i = 0; i < drawerCount; i++) {
+                    const sideMM = (i === 0 ? sideHeightBottom : sideHeightOther);
+                    const boxHeightPx = sideMM * s;
+                    const boxBottom = yFront + (dH - boxHeightPx) / 2;
+
+                    ctx.lineWidth = 1.3;
+                    const frontDepthPx = THICKNESS * s;
+                    ctx.strokeRect(x0 + wpx - frontDepthPx, yFront, frontDepthPx, dH);
+
+                    ctx.lineWidth = 1.1;
+                    const bodyDepthPx = drawerInnerDepth * s;
+                    ctx.strokeRect(x0 + wpx - frontDepthPx - bodyDepthPx, boxBottom, bodyDepthPx, boxHeightPx);
+
+                    if (i < drawerCount - 1) {
+                        const gapY = yFront - gapPx;
+                        ctx.setLineDash([3, 3]);
+                        ctx.beginPath();
+                        ctx.moveTo(x0 + THICKNESS * s + 4, gapY);
+                        ctx.lineTo(x0 + wpx - THICKNESS * s - 4, gapY);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    }
+
+                    yFront -= (dH + gapPx);
+                }
+
+                ctx.restore();
+            })();
+        }
+
+        /* ===================== GELİŞMİŞ NESTING ===================== */
+        function drawNestingOptimized(parts) {
+            const sorted = parts.slice().sort((a, b) => {
+                const ma = Math.max(a.w, a.h),
+                    mb = Math.max(b.w, b.h);
+                if (mb !== ma) return mb - ma;
+                return (b.w * b.h) - (a.w * a.h);
+            });
+
+            const resultSheets = [];
+            let current = newSheet();
+
+            sorted.forEach(p => {
+                let placed = placeInSheet(current, p);
+                if (!placed) {
+                    resultSheets.push(current);
+                    current = newSheet();
+                    placed = placeInSheet(current, p);
+                    if (!placed) {
+                        current.rects.push({
+                            x: KERF_MM / 2,
+                            y: KERF_MM / 2,
+                            w: p.w,
+                            h: p.h,
+                            short: p.short,
+                            name: p.name
+                        });
+                    }
+                }
+            });
+            resultSheets.push(current);
+
+            const usedArea = parts.reduce((s, p) => s + (p.w * p.h), 0);
+            lastSheets = {
+                sheets: resultSheets,
+                usedAreaM2: usedArea / 1_000_000
+            };
+
+            const prevCount = nestingAnim.lastCount || 0;
+            const newCount = resultSheets.length;
+            nestingAnim.lastCount = newCount;
+            nestingAnim.pendingKick = (newCount > prevCount) ? -0.5 : (newCount < prevCount ? +0.5 : 0);
+
+            document.getElementById('sheetCountBadge').innerText = `${newCount} PLAKA`;
+            document.getElementById('kerfInfoLabel').innerText = `Kerf boşluğu: ${KERF_MM} mm`;
+
+            renderNestingCanvas();
+
+            function newSheet() {
+                return {
+                    rects: [],
+                    free: [{
+                        x: 0,
+                        y: 0,
+                        w: SHEET_W,
+                        h: SHEET_H
+                    }]
+                };
+            }
+
+            function placeInSheet(sheet, part) {
+                const gap = KERF_MM;
+                const candidates = [{
+                        rw: part.w + gap,
+                        rh: part.h + gap,
+                        rot: false
+                    },
+                    {
+                        rw: part.h + gap,
+                        rh: part.w + gap,
+                        rot: true
+                    }
+                ];
+
+                let best = null;
+                sheet.free.forEach((fr, fi) => {
+                    candidates.forEach(c => {
+                        if (c.rw <= fr.w && c.rh <= fr.h) {
+                            const waste = (fr.w * fr.h) - (c.rw * c.rh);
+                            const shortSide = Math.min(fr.w - c.rw, fr.h - c.rh);
+                            const score = shortSide + waste * 1e-6;
+                            if (!best || score < best.score) {
+                                best = {
+                                    fi,
+                                    fr,
+                                    c,
+                                    score
+                                };
+                            }
+                        }
+                    });
+                });
+
+                if (!best) return false;
+
+                const px = best.fr.x;
+                const py = best.fr.y;
+                const drawX = px + gap / 2;
+                const drawY = py + gap / 2;
+                const realW = best.c.rot ? part.h : part.w;
+                const realH = best.c.rot ? part.w : part.h;
+
+                sheet.rects.push({
+                    x: drawX,
+                    y: drawY,
+                    w: realW,
+                    h: realH,
+                    short: part.short,
+                    name: part.name
+                });
+
+                splitFreeRect(sheet.free, best.fi, px, py, best.c.rw, best.c.rh);
+                pruneFreeList(sheet.free);
+
+                return true;
+            }
+
+            function splitFreeRect(freeList, idx, x, y, w, h) {
+                const fr = freeList[idx];
+                const right = {
+                    x: x + w,
+                    y: fr.y,
+                    w: (fr.x + fr.w) - (x + w),
+                    h: fr.h
+                };
+                const top = {
+                    x: fr.x,
+                    y: y + h,
+                    w: fr.w,
+                    h: (fr.y + fr.h) - (y + h)
+                };
+                const leftW = x - fr.x;
+                const bottomH = y - fr.y;
+                const left = {
+                    x: fr.x,
+                    y: fr.y,
+                    w: leftW,
+                    h: fr.h
+                };
+                const bottom = {
+                    x: fr.x,
+                    y: fr.y,
+                    w: fr.w,
+                    h: bottomH
+                };
+
+                freeList.splice(idx, 1);
+                [right, top, left, bottom].forEach(r => {
+                    if (r.w > 1e-6 && r.h > 1e-6) freeList.push(r);
+                });
+
+                for (let i = freeList.length - 1; i >= 0; i--) {
+                    const r = freeList[i];
+                    if (rectsOverlap(r.x, r.y, r.w, r.h, x, y, w, h)) {
+                        const pieces = subtractRect(r, {
+                            x,
+                            y,
+                            w,
+                            h
+                        });
+                        freeList.splice(i, 1, ...pieces);
+                    }
+                }
+            }
+
+            function rectsOverlap(x1, y1, w1, h1, x2, y2, w2, h2) {
+                return !(x1 + w1 <= x2 || x2 + w2 <= x1 || y1 + h1 <= y2 || y2 + h2 <= y1);
+            }
+
+            function subtractRect(r, s) {
+                const out = [];
+                const x1 = r.x,
+                    y1 = r.y,
+                    x2 = r.x + r.w,
+                    y2 = r.y + r.h;
+                const a1 = s.x,
+                    b1 = s.y,
+                    a2 = s.x + s.w,
+                    b2 = s.y + s.h;
+
+                if (b2 < y2 && b2 > y1) {
+                    out.push({
+                        x: x1,
+                        y: b2,
+                        w: r.w,
+                        h: y2 - b2
+                    });
+                    r = {
+                        x: x1,
+                        y: y1,
+                        w: r.w,
+                        h: b2 - y1
+                    };
+                }
+                if (b1 > y1 && b1 < y1 + r.h) {
+                    out.push({
+                        x: x1,
+                        y: y1,
+                        w: r.w,
+                        h: b1 - y1
+                    });
+                    r = {
+                        x: x1,
+                        y: b1,
+                        w: r.w,
+                        h: (y1 + r.h) - b1
+                    };
+                }
+                if (a2 < x2 && a2 > x1) {
+                    out.push({
+                        x: a2,
+                        y: r.y,
+                        w: x2 - a2,
+                        h: r.h
+                    });
+                    r = {
+                        x: x1,
+                        y: r.y,
+                        w: a2 - x1,
+                        h: r.h
+                    };
+                }
+                if (a1 > x1 && a1 < x1 + r.w) {
+                    out.push({
+                        x: x1,
+                        y: r.y,
+                        w: a1 - x1,
+                        h: r.h
+                    });
+                    r = {
+                        x: a1,
+                        y: r.y,
+                        w: (x1 + r.w) - a1,
+                        h: r.h
+                    };
+                }
+                if (r.w > 1e-6 && r.h > 1e-6) {
+                    if (!rectsOverlap(r.x, r.y, r.w, r.h, s.x, s.y, s.w, s.h)) {
+                        out.push(r);
+                    }
+                }
+                return out.filter(rr => rr.w > 1e-6 && rr.h > 1e-6);
+            }
+
+            function pruneFreeList(freeList) {
+                for (let i = 0; i < freeList.length; i++) {
+                    for (let j = i + 1; j < freeList.length; j++) {
+                        const a = freeList[i],
+                            b = freeList[j];
+                        if (contains(a, b)) {
+                            freeList.splice(j, 1);
+                            j--;
+                            continue;
+                        }
+                        if (contains(b, a)) {
+                            freeList.splice(i, 1);
+                            i--;
+                            break;
+                        }
+                    }
+                }
+
+                function contains(a, b) {
+                    return a.x <= b.x && a.y <= b.y && a.x + a.w >= b.x + b.w && a.y + a.h >= b.y + b.h;
+                }
+                let merged = true;
+                while (merged) {
+                    merged = false;
+                    outer: for (let i = 0; i < freeList.length; i++) {
+                        for (let j = i + 1; j < freeList.length; j++) {
+                            const A = freeList[i],
+                                B = freeList[j];
+                            if (A.y === B.y && A.h === B.h && (A.x + A.w === B.x || B.x + B.w === A.x)) {
+                                const nx = Math.min(A.x, B.x),
+                                    nw = A.w + B.w;
+                                freeList.splice(j, 1);
+                                freeList.splice(i, 1, {
+                                    x: nx,
+                                    y: A.y,
+                                    w: nw,
+                                    h: A.h
+                                });
+                                merged = true;
+                                break outer;
+                            }
+                            if (A.x === B.x && A.w === B.w && (A.y + A.h === B.y || B.y + B.h === A.y)) {
+                                const ny = Math.min(A.y, B.y),
+                                    nh = A.h + B.h;
+                                freeList.splice(j, 1);
+                                freeList.splice(i, 1, {
+                                    x: A.x,
+                                    y: ny,
+                                    w: A.w,
+                                    h: nh
+                                });
+                                merged = true;
+                                break outer;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /* =================== NESTING ÇİZİM (anim’li) =================== */
+        function renderNestingCanvas() {
+            const canvas = document.getElementById('nestingCanvas');
+            const dpr = window.devicePixelRatio || 1;
+            const cssWidth = canvas.clientWidth || canvas.parentElement.clientWidth;
+            const cssHeight = canvas.clientHeight || canvas.parentElement.clientHeight;
+            canvas.width = Math.max(1, cssWidth * dpr);
+            canvas.height = Math.max(1, cssHeight * dpr);
+
+            const ctx = canvas.getContext('2d');
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.translate(0.5, 0.5);
+
+            ctx.clearRect(0, 0, cssWidth, cssHeight);
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, cssWidth, cssHeight);
+
+            if (!lastSheets) {
+                return;
+            }
+
+            const sheets = lastSheets.sheets;
+            const total = sheets.length;
+
+            const padding = 18;
+            const scale = Math.min(
+                (cssHeight - 2 * padding) / SHEET_H,
+                2
+            );
+            const sheetPxW = SHEET_W * scale;
+            const sheetPxH = SHEET_H * scale;
+            const gap = Math.max(12, sheetPxW * 0.08);
+
+            const centerX = cssWidth / 2;
+
+            if (typeof nestingAnim.pendingKick !== 'undefined' && nestingAnim.pendingKick) {
+                nestingAnim.current += nestingAnim.pendingKick * (sheetPxW + gap);
+                nestingAnim.target = 0;
+                nestingAnim.vel = 0;
+                nestingAnim.pendingKick = 0;
+            }
+
+            for (let i = 0; i < total; i++) {
+                const indexFromCenter = i - (total - 1) / 2;
+                const baseX = centerX + nestingAnim.current + indexFromCenter * (sheetPxW + gap) - sheetPxW / 2;
+                const ox = baseX;
+                const oy = (cssHeight - sheetPxH) / 2;
+
+                ctx.save();
+                ctx.strokeStyle = "#000";
+                ctx.lineWidth = 0.9;
+                ctx.strokeRect(ox, oy, sheetPxW, sheetPxH);
+
+                ctx.font = "9px Inter";
+                ctx.textAlign = "left";
+                ctx.fillStyle = "#000";
+                ctx.fillText(`Plaka ${i+1}`, ox, oy - 4);
+
+                const sSheet = sheets[i];
+                sSheet.rects.forEach(r => {
+                    const rx = ox + r.x * scale;
+                    const ry = oy + (SHEET_H - r.y - r.h) * scale;
+                    const rw = r.w * scale;
+                    const rh = r.h * scale;
+                    ctx.fillStyle = colorForShort(r.short, "#ffffff");
+                    ctx.fillRect(rx, ry, rw, rh);
+                    ctx.strokeStyle = "#000";
+                    ctx.lineWidth = 0.6;
+                    ctx.strokeRect(rx, ry, rw, rh);
+                    ctx.fillStyle = "#000";
+                    ctx.font = "8px JetBrains Mono";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    ctx.fillText(r.short || "", rx + rw / 2, ry + rh / 2);
+                });
+
+                ctx.restore();
+            }
+
+            const totalSheetAreaM2 = total * SHEET_W * SHEET_H / 1_000_000;
+            const usedM2 = lastSheets.usedAreaM2;
+            const eff = totalSheetAreaM2 > 0 ? (usedM2 / totalSheetAreaM2 * 100) : 0;
+            const scrap = 100 - eff;
+
+            const effPanel = document.getElementById('efficiencyPanel');
+            effPanel.innerHTML = `
+    <span>Toplam plaka: ${totalSheetAreaM2.toFixed(3)} m²</span>
+    <span>Kullanılan: ${usedM2.toFixed(3)} m²</span>
+    <span>Verimlilik: ${eff.toFixed(1)}%</span>
+    <span>Fire: ${scrap.toFixed(1)}%</span>
+  `;
+        }
+
+        /* =================== DOSYA İNDİRME =================== */
+        function downloadFile(filename, mime, content) {
+            const blob = new Blob([content], {
+                type: mime
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        /* =================== DXF EXPORT =================== */
+        function exportDXF() {
+            if (!lastSheets) {
+                alert("Önce model hesaplanmalı.");
+                return;
+            }
+            const {
+                sheets
+            } = lastSheets;
+            let dxf = "0\nSECTION\n2\nENTITIES\n";
+
+            function line(x1, y1, x2, y2, layer) {
+                dxf += "0\nLINE\n8\n" + layer + "\n10\n" + x1 + "\n20\n" + y1 + "\n11\n" + x2 + "\n21\n" + y2 + "\n";
+            }
+
+            function rect(x, y, w, h, layer) {
+                line(x, y, x + w, y, layer);
+                line(x + w, y, x + w, y + h, layer);
+                line(x + w, y + h, x, y + h, layer);
+                line(x, y + h, x, y, layer);
+            }
+
+            let xOff = 0;
+            const gap = 100;
+            sheets.forEach((sheet, idx) => {
+                rect(xOff, 0, SHEET_W, SHEET_H, "PLAKA_" + (idx + 1));
+                sheet.rects.forEach(r => {
+                    rect(xOff + r.x, r.y, r.w, r.h, "PARCA_" + (r.short || ""));
+                });
+                xOff += SHEET_W + gap;
+            });
+
+            dxf += "0\nENDSEC\n0\nEOF\n";
+            downloadFile("plaka_nesting.dxf", "application/dxf", dxf);
+        }
+
+        /* =================== 2D ÇİZİM DXF (GAP SENKRON) =================== */
+        function export2DDXF() {
+            if (!lastGeom) {
+                updateSystem();
+                if (!lastGeom) {
+                    return;
+                }
+            }
+            const G = lastGeom;
+            const W = G.W,
+                H = G.H,
+                D_NET = G.D_NET,
+                LegH = G.LegH,
+                drawerCount = G.drawerCount,
+                drawerFrontH = G.drawerFrontH;
+            const TK = G.THICKNESS,
+                drawerInnerDepth = G.drawerInnerDepth,
+                drawerInnerWidth = G.drawerInnerWidth;
+            const sideHeightBottom = G.sideHeightBottom,
+                sideHeightOther = G.sideHeightOther,
+                FRONT_GAP = G.frontGap || 3;
+
+            let dxf = "0\nSECTION\n2\nENTITIES\n";
+
+            function line(x1, y1, x2, y2, layer) {
+                dxf += "0\nLINE\n8\n" + layer + "\n10\n" + x1 + "\n20\n" + y1 + "\n11\n" + x2 + "\n21\n" + y2 + "\n";
+            }
+
+            function rect(x, y, w, h, layer) {
+                line(x, y, x + w, y, layer);
+                line(x + w, y, x + w, y + h, layer);
+                line(x + w, y + h, x, y + h, layer);
+                line(x, y + h, x, y, layer);
+            }
+
+            let X = 0,
+                Y = 0;
+            const pad = 200;
+
+            // --- FRONT (Kapaklı, GAP ile) ---
+            {
+                const x0 = X,
+                    y0 = Y;
+                line(x0, y0 + LegH, x0 + W, y0 + LegH, "FRONT");
+                let y = y0 + LegH + (H - drawerFrontH);
+                for (let i = 0; i < drawerCount; i++) {
+                    rect(x0 + 2, y, W - 4, drawerFrontH, "FRONT_DRAWER");
+                    y -= (drawerFrontH + FRONT_GAP);
+                }
+                const legW = 36,
+                    inset = 40;
+                rect(x0 + inset, y0, legW, LegH, "FRONT_LEG");
+                rect(x0 + W - inset - legW, y0, legW, LegH, "FRONT_LEG");
+            }
+
+            X += W + pad;
+
+            // --- FRONT (Kapaksız/İç kutular) ---
+            {
+                const x0 = X,
+                    y0 = Y;
+                rect(x0 + TK, y0 + LegH, W - 2 * TK, H, "OPEN_BODY");
+                line(x0 + TK, y0 + LegH + TK, x0 + W - TK, y0 + LegH + TK, "OPEN_BODY");
+                line(x0 + TK, y0 + LegH + H - TK, x0 + W - TK, y0 + LegH + H - TK, "OPEN_BODY");
+
+                let y = y0 + LegH + (H - drawerFrontH);
+                for (let i = 0; i < drawerCount; i++) {
+                    const sH = (i === 0 ? sideHeightBottom : sideHeightOther);
+                    const boxBottom = y + (drawerFrontH - sH) / 2;
+                    rect(x0 + TK + 2, boxBottom, W - 2 * (TK + 2), sH, "OPEN_BOX");
+                    y -= (drawerFrontH + FRONT_GAP);
+                }
+                const legW = 36,
+                    inset = 40;
+                rect(x0 + inset, y0, legW, LegH, "OPEN_LEG");
+                rect(x0 + W - inset - legW, y0, legW, LegH, "OPEN_LEG");
+            }
+
+            X += W + pad;
+
+            // --- PLAN ---
+            {
+                const x0 = X,
+                    y0 = Y;
+                rect(x0, y0, TK, D_NET, "PLAN_SIDE");
+                rect(x0 + W - TK, y0, TK, D_NET, "PLAN_SIDE");
+                rect(x0 + TK, y0 + 4, W - 2 * TK, TOP_RAIL_H - 8, "PLAN_RAIL");
+                rect(x0 + TK, y0 + D_NET - TOP_RAIL_H + 4, W - 2 * TK, TOP_RAIL_H - 8, "PLAN_RAIL");
+                const leg = 36,
+                    inset = 40;
+                rect(x0 + inset, y0 + inset, leg, leg, "PLAN_LEG");
+                rect(x0 + W - inset - leg, y0 + inset, leg, leg, "PLAN_LEG");
+                rect(x0 + inset, y0 + D_NET - inset - leg, leg, leg, "PLAN_LEG");
+                rect(x0 + W - inset - leg, y0 + D_NET - inset - leg, leg, leg, "PLAN_LEG");
+                if (W > 600 && W <= 900) {
+                    rect(x0 + (W - leg) / 2, y0 + D_NET - inset - leg, leg, leg, "PLAN_LEG");
+                } else if (W > 900) {
+                    rect(x0 + (W - leg) / 2, y0 + inset, leg, leg, "PLAN_LEG");
+                    rect(x0 + (W - leg) / 2, y0 + D_NET - inset - leg, leg, leg, "PLAN_LEG");
+                }
+                const innerSide = (TK + 5);
+                rect(x0 + innerSide, y0 + 10, drawerInnerWidth, drawerInnerDepth, "PLAN_BOX");
+            }
+
+            X += W + pad;
+
+            // --- KESİT A-A (GAP ile) ---
+            {
+                const x0 = X,
+                    y0 = Y;
+                rect(x0 + TK, y0 + LegH, D_NET - 2 * TK, H, "SEC_BODY");
+                line(x0 + TK, y0 + LegH + TK, x0 + D_NET - TK, y0 + LegH + TK, "SEC_BODY");
+                line(x0 + TK, y0 + LegH + H - TK, x0 + D_NET - TK, y0 + LegH + H - TK, "SEC_BODY");
+                const legW = 36,
+                    inset = 40;
+                rect(x0 + inset, y0, legW, LegH, "SEC_LEG");
+                rect(x0 + D_NET - inset - legW, y0, legW, LegH, "SEC_LEG");
+
+                let y = y0 + LegH + (H - drawerFrontH);
+                for (let i = 0; i < drawerCount; i++) {
+                    const sH = (i === 0 ? sideHeightBottom : sideHeightOther);
+                    rect(x0 + D_NET - TK, y, TK, drawerFrontH, "SEC_FRONT");
+                    const boxBottom = y + (drawerFrontH - sH) / 2;
+                    rect(x0 + D_NET - TK - drawerInnerDepth, boxBottom, drawerInnerDepth, sH, "SEC_BOX");
+                    y -= (drawerFrontH + FRONT_GAP);
+                }
+            }
+
+            dxf += "0\nENDSEC\n0\nEOF\n";
+            downloadFile("modul_2d_cizimler.dxf", "application/dxf", dxf);
+        }
+
+        /* =================== NESTING PDF EXPORT – Ortalanmış Metin =================== */
+        function hexToRgb(hex) {
+            const h = hex.replace('#', '');
+            const bigint = parseInt(h, 16);
+            const r = (bigint >> 16) & 255;
+            const g = (bigint >> 8) & 255;
+            const b = bigint & 255;
+            return {
+                r,
+                g,
+                b
+            };
+        }
+        // jsPDF dik/yan metin yerleşimi, tam ortalama düzeltmeli
+        function exportNestingPDF() {
+            if (!lastSheets) {
+                updateSystem();
+                if (!lastSheets) {
+                    return;
+                }
+            }
+            const {
+                jsPDF
+            } = window.jspdf;
+            const pdf = new jsPDF({
+                orientation: 'landscape',
+                unit: 'mm',
+                format: 'a4'
+            });
+            const pageW = pdf.internal.pageSize.getWidth();
+            const pageH = pdf.internal.pageSize.getHeight();
+
+            const margin = 8; // mm
+            const titleH = 8; // mm
+            const drawW = pageW - 2 * margin;
+            const drawH = pageH - 2 * margin - titleH;
+
+            const scale = Math.min(drawW / SHEET_W, drawH / SHEET_H);
+            const sheetWmm = SHEET_W * scale;
+            const sheetHmm = SHEET_H * scale;
+
+            const ox = margin + (drawW - sheetWmm) / 2;
+            const oy = margin + titleH + (drawH - sheetHmm) / 2;
+
+            const sheets = lastSheets.sheets;
+
+            // Ortalama için küçük tip yardımcısı
+            function centerText(text, cx, cy, fs, angle = 0) {
+                // 1 pt ≈ 0.3528 mm, görsel orta düzeltmesi için 0.35*fs/3
+                pdf.saveGraphicsState();
+                pdf.setFontSize(fs);
+                const vFix = (fs * 0.3528) / 3.2; // hafif aşağı kaydır
+                if (angle !== 0) {
+                    pdf.text(text, cx, cy + vFix, {
+                        align: 'center',
+                        angle
+                    });
+                } else {
+                    pdf.text(text, cx, cy + vFix, {
+                        align: 'center'
+                    });
+                }
+                pdf.restoreGraphicsState();
+            }
+
+            function drawTextSmart(text, x, y, w, h) {
+                const pad = 1.6;
+                let fs = 7;
+                pdf.setFontSize(fs);
+                let width = pdf.getTextWidth(text);
+                // önce yatay dene
+                if (width > (w - 2 * pad)) {
+                    while (fs > 4 && width > (w - 2 * pad)) {
+                        fs -= 0.2;
+                        pdf.setFontSize(fs);
+                        width = pdf.getTextWidth(text);
+                    }
+                }
+                const cx = x + w / 2;
+                const cy = y + h / 2;
+                pdf.setTextColor(0, 0, 0);
+
+                if (width <= (w - 2 * pad)) {
+                    centerText(text, cx, cy, fs, 0);
+                    return;
+                }
+                // dikey dene (ad çoook uzun ise)
+                // yüksekliğe sığdır
+                while (fs > 4 && width > (h - 2 * pad)) {
+                    fs -= 0.2;
+                    pdf.setFontSize(fs);
+                    width = pdf.getTextWidth(text);
+                }
+                centerText(text, cx, cy, fs, -90);
+            }
+
+            sheets.forEach((s, idx) => {
+                if (idx > 0) pdf.addPage('a4', 'landscape');
+
+                pdf.setFontSize(11);
+                pdf.setTextColor(0, 0, 0);
+                // Başlığı ortala
+                pdf.text(`Plaka ${idx+1} – ${Math.round(SHEET_W/10)}x${Math.round(SHEET_H/10)} cm`, pageW / 2, margin + 6, {
+                    align: 'center'
+                });
+
+                // Çerçeve kalın ve net
+                pdf.setLineWidth(0.4);
+                pdf.setDrawColor(0, 0, 0);
+                pdf.rect(ox, oy, sheetWmm, sheetHmm, 'S');
+
+                s.rects.forEach(r => {
+                    const rx = ox + (r.x * scale);
+                    const ry = oy + ((SHEET_H - r.y - r.h) * scale);
+                    const rw = r.w * scale;
+                    const rh = r.h * scale;
+
+                    const fill = colorForShort(r.short, "#ffffff");
+                    const {
+                        r: rr,
+                        g: gg,
+                        b: bb
+                    } = hexToRgb(fill);
+                    pdf.setFillColor(rr, gg, bb);
+
+                    pdf.setDrawColor(0, 0, 0);
+                    pdf.setLineWidth(0.28);
+                    pdf.rect(rx, ry, rw, rh, 'FD');
+
+                    // İsim ve ölçü: tam ortalı
+                    const name = r.name || (r.short || "");
+                    const sizeText = `${Math.round(r.h)} x ${Math.round(r.w)} mm`;
+
+                    if (rw > 10 && rh > 6) {
+                        drawTextSmart(name, rx, ry, rw, rh - 4);
+                        if (rw > 12 && rh > 8) {
+                            pdf.setFontSize(6);
+                            pdf.setTextColor(0, 0, 0);
+                            // ölçüyü de ortala
+                            const cx = rx + rw / 2,
+                                cy = ry + rh / 2 + 4;
+                            pdf.text(sizeText, cx, cy, {
+                                align: 'center'
+                            });
+                        }
+                    }
+                });
+
+                pdf.setFontSize(8);
+                pdf.text(`Kerf: ${KERF_MM} mm`, pageW - margin - 25, pageH - margin, {
+                    align: 'right'
+                });
+            });
+
+            pdf.save('plaka_nesting.pdf');
+        }
+
+        /* =================== TEKNİK ÇİZİM PANEL AÇ/KAPA – Modern anim =================== */
+        (function() {
+            const wrapper = document.getElementById('drawing-wrapper');
+            const toggle = document.getElementById('drawingToggle');
+
+            let strip = false;
+            let animTimer = null;
+
+            function addAnimatingFlash() {
+                wrapper.classList.add('animating');
+                clearTimeout(animTimer);
+                animTimer = setTimeout(() => wrapper.classList.remove('animating'), 320);
+            }
+
+            function redrawAfterTransition() {
+                requestAnimationFrame(() => requestAnimationFrame(() => {
+                    if (pendingDraw) {
+                        draw2DViews(pendingDraw);
+                    } else if (lastGeom) {
+                        draw2DViews(lastGeom);
+                    }
+                }));
+            }
+
+            function setState(isStrip) {
+                strip = isStrip;
+                addAnimatingFlash();
+                if (strip) {
+                    wrapper.classList.add('strip');
+                    toggle.textContent = '▢';
+                } else {
+                    wrapper.classList.remove('strip');
+                    toggle.textContent = '✕';
+                    redrawAfterTransition();
+                }
+            }
+
+            wrapper.addEventListener('transitionend', (e) => {
+                if ((e.propertyName === 'width' || e.propertyName === 'transform') && !strip) {
+                    redrawAfterTransition();
+                }
+            });
+
+            toggle.addEventListener('click', () => setState(!strip));
+            setState(false);
+        })();
+
+        /* =================== ANA ANİMASYON =================== */
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // NESTING kaydırma easing
+            {
+                const dt = 1 / 60,
+                    k = 60,
+                    c = 10;
+                const a = -k * (nestingAnim.current - nestingAnim.target) - c * nestingAnim.vel;
+                nestingAnim.vel += a * dt;
+                nestingAnim.current += nestingAnim.vel * dt;
+                if (Math.abs(nestingAnim.current - nestingAnim.target) < 0.1 && Math.abs(nestingAnim.vel) < 0.1) {
+                    nestingAnim.current = nestingAnim.target;
+                    nestingAnim.vel = 0;
+                }
+                renderNestingCanvas();
+            }
+
+            if (idleActive) {
+                const t = (performance.now() - idleStart) / 1000;
+
+                // Model dönüşü ±10°
+                const yaw = Math.sin(t * 0.7) * (Math.PI / 18);
+                cabinet.rotation.y = yaw;
+
+                // Sadece dışarı doğru açılma (Open baz + 0..100mm)
+                if (lastGeom) {
+                    const maxOpen = Math.max(0, lastGeom.D_NET - 150);
+                    const osc01 = (Math.sin(t * 1.1) + 1) / 2; // 0..1
+                    let desiredOpen = animBaseOpen + 100 * osc01;
+                    if (desiredOpen > maxOpen) desiredOpen = maxOpen;
+
+                    const delta = desiredOpen - animBaseOpen; // >= 0
+                    drawersGroup.children.forEach(g => {
+                        g.position.z = delta;
+                    });
+
+                    // UI senkronu (görsel)
+                    const disp = Math.round(desiredOpen);
+                    document.getElementById('rangeOpen').value = disp;
+                    document.getElementById('numOpen').value = disp;
+                }
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        /* =================== Responsive =================== */
+        function resize3D() {
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+            renderNestingCanvas();
+            if (!document.getElementById('drawing-wrapper').classList.contains('strip') && lastGeom) {
+                requestAnimationFrame(() => draw2DViews(lastGeom));
+            }
+        }
+        window.addEventListener('resize', resize3D);
+
+        /* =================== İlk hesap =================== */
+        updateSheetSize();
+
+        /* =================== Excel (HTML) Export – TR uyumlu, renkli =================== */
+        function exportExcel() {
+            if (!lastGeom) {
+                updateSystem();
+            }
+            const unitPrice = document.getElementById('unitPriceDisplay').textContent.trim();
+            const grandTotal = document.getElementById('grandTotalDisplay').textContent.trim();
+            const effHTML = document.getElementById('efficiencyPanel').innerText;
+            const sheetCount = (lastSheets && lastSheets.sheets ? lastSheets.sheets.length : 0);
+
+            const woodRows = document.getElementById('woodList').innerHTML;
+            const hardwareRows = document.getElementById('hardwareList').innerHTML;
+
+            const p = {
+                W: document.getElementById('numW').value,
+                H: document.getElementById('numH').value,
+                D: document.getElementById('numD').value,
+                Leg: document.getElementById('numLeg').value,
+                K: document.getElementById('numK').value,
+                Drawer: document.getElementById('numDrawer').value,
+                Thickness: document.getElementById('numThickness').value,
+                Kerf: document.getElementById('numKerf').value,
+                Open: document.getElementById('numOpen').value,
+                Count: document.getElementById('inpModuleCount').value
+            };
+
+            const style = `
+    <style>
+      body{font-family:Arial,Helvetica,sans-serif;}
+      .title{font-weight:700;font-size:16px;margin:8px 0;}
+      table{border-collapse:collapse;width:100%; margin-bottom:12px;}
+      th,td{border:1px solid #ccc;padding:6px 8px;font-size:12px;}
+      thead th{background:#111;color:#fff;font-weight:700;text-transform:uppercase;letter-spacing:.5px;}
+      tbody tr:nth-child(even){background:#f8f8f8;}
+      .badge{display:inline-block;background:#111;color:#fff;padding:2px 6px;font-weight:700;}
+      .section{margin-top:10px;}
+      .kv td:first-child{font-weight:700;background:#f4f4f4;width:220px;}
+      .summary{background:#f0f7ff;}
+    </style>
+  `;
+
+            const html =
+                `<html><head><meta charset="UTF-8">${style}</head>
+<body>
+  <div class="title">Parametrik Çekmece Modülü – Malzeme ve Maliyet Özeti</div>
+  <table class="kv">
+    <tbody>
+      <tr><td>Birim Fiyat</td><td>${unitPrice}</td></tr>
+      <tr><td>Genel Toplam</td><td>${grandTotal}</td></tr>
+      <tr><td>Plaka Sayısı</td><td>${sheetCount}</td></tr>
+      <tr><td>Verimlilik & Fire</td><td>${effHTML}</td></tr>
+    </tbody>
+  </table>
+
+  <div class="section">
+    <div class="title">Parça Listesi</div>
+    <table>
+      <thead><tr><th>Parça</th><th>Adet</th><th>Ölçü (mm)</th><th>Alan (m²)</th></tr></thead>
+      <tbody>${woodRows}</tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="title">Hırdavat</div>
+    <table>
+      <thead><tr><th>Tip</th><th>Adet</th></tr></thead>
+      <tbody>${hardwareRows}</tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="title">Parametreler</div>
+    <table class="kv">
+      <tbody>
+        <tr><td>Genişlik (W)</td><td>${p.W} mm</td></tr>
+        <tr><td>Gövde Yüksekliği (H)</td><td>${p.H} mm</td></tr>
+        <tr><td>Modül Derinliği (D)</td><td>${p.D} mm</td></tr>
+        <tr><td>Ayak Yüksekliği</td><td>${p.Leg} mm</td></tr>
+        <tr><td>Toplam Yükseklik (K)</td><td>${p.K} mm</td></tr>
+        <tr><td>Çekmece Adedi</td><td>${p.Drawer}</td></tr>
+        <tr><td>MDF Kalınlığı</td><td>${p.Thickness} mm</td></tr>
+        <tr><td>Kerf</td><td>${p.Kerf} mm</td></tr>
+        <tr><td>Çekmece Açılma</td><td>${p.Open} mm</td></tr>
+        <tr><td>Modül Adedi</td><td>${p.Count}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</body></html>`;
+
+            const blob = new Blob(["\ufeff" + html], {
+                type: "application/vnd.ms-excel;charset=utf-8"
+            });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "malzeme_listesi.xls";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    </script>
+</body>
+
+</html>
